@@ -16,3 +16,12 @@ F:\Driver_ControlPanel_v1\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v
 F:\Driver_ControlPanel_v1\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.csproj.GenerateResource.Cache
 F:\Driver_ControlPanel_v1\Driver_ControlPanel_v1\bin\Debug\Driver_ControlPanel_v1.exe
 F:\Driver_ControlPanel_v1\Driver_ControlPanel_v1\bin\Debug\Driver_ControlPanel_v1.pdb
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\bin\Debug\Driver_ControlPanel_v1.exe.config
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.exe
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.pdb
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.csprojResolveAssemblyReference.cache
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.Form1.resources
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.Properties.Resources.resources
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\obj\Debug\Driver_ControlPanel_v1.csproj.GenerateResource.Cache
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\bin\Debug\Driver_ControlPanel_v1.exe
+E:\Dropbox\LKM\Desktop\實驗室\Massage\Code\7_Motor_Controller\Driver_ControlPanel_v1\bin\Debug\Driver_ControlPanel_v1.pdb

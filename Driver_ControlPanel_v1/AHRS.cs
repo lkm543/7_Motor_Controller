@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
-
+using System.Threading;
 using System.IO;
 using System.IO.Ports;
 using System.Runtime.InteropServices;
@@ -13,7 +13,11 @@ namespace AHRSInterface
     // Delegate types for interfacing with AHRS class events
     // The PacketDelegate type is used to create handlers for 'PacketReceived' events
     // and for 'COMFailed' events.
-    public delegate void PacketDelegate(PName packet_type, int flags);
+
+    
+
+    public delegate void PacketDelegate(PName packet_type, int flags ,int motor_channel);
+    
 
     public delegate void StateDelegate(StateName state_type, int flags);
 
@@ -70,98 +74,100 @@ namespace AHRSInterface
 
     public enum PName
     {
-		 WHO_AM_I			= 0,
-		 FIRMWARE_VERSION,	   
-		 ID_STATUS,			   
-		 PWM_PARAMETER,		   
-		 CMD_CRC_FAILED, 	   
-		 CMD_NO_SUPPORT, 	   
-		 CMD_OVER_DATA_LENGTH,  
-		 CMD_COMPLETE,
-		 REPORT_SENSOR_ADC,
-		 CONTROLLER_STATUS,	   
-							   
-		 RESET_CONTROLLER,	   
-		 KICK_OFF_CONTROLLER,   
-		 REPORT_MCU_INFORMATION,
-		 HOME_CMD,
-		 PAUSE_REPORT_INFO,
-		 CONTINUE_REPORT_INFO,
-		 
-		 ALL_OF_PID_PARAM,	   
-		 POSITION_OF_PID_PARAM, 
-		 VELOCITY_OF_PID_PARAM, 
-		 TORQUE_OF_PID_PARAM,   
-							   
-		 MAX_OF_POSITION_CMD,   
-		 MAX_OF_VELOCITY_CMD,   
-		 MAX_OF_TORQUE_CMD,	   
-		 MAX_OF_PWM_DUTYCYCLE,  
-							   
-		 POSITION_TARGET_CMD,   
-		 VELOCITY_EXT_CMD,	   
-		 TORQUE_EXT_CMD, 	   
-		 DEBUG_MODE, 		   
+        WHO_AM_I = 0,
+        FIRMWARE_VERSION,
+        ID_STATUS,
+        PWM_PARAMETER,
+        CMD_CRC_FAILED,
+        CMD_NO_SUPPORT,
+        CMD_OVER_DATA_LENGTH,
+        CMD_COMPLETE,
+        REPORT_SENSOR_ADC,
+        CONTROLLER_STATUS,
+
+        RESET_CONTROLLER,
+        KICK_OFF_CONTROLLER,
+        REPORT_MCU_INFORMATION,
+        HOME_CMD,
+        PAUSE_REPORT_INFO,
+        CONTINUE_REPORT_INFO,
+
+        ALL_OF_PID_PARAM,
+        POSITION_OF_PID_PARAM,
+        VELOCITY_OF_PID_PARAM,
+        TORQUE_OF_PID_PARAM,
+
+        MAX_OF_POSITION_CMD,
+        MAX_OF_VELOCITY_CMD,
+        MAX_OF_TORQUE_CMD,
+        MAX_OF_PWM_DUTYCYCLE,
+
+        POSITION_TARGET_CMD,
+        VELOCITY_EXT_CMD,
+        TORQUE_EXT_CMD,
+        REPORT_INFO_PERIOD,
+        DEBUG_MODE, 	
     }
 
     public enum StateName
     {
-        STATE_WHO_AM_I  = 0,      
-        STATE_FIRMWARE_VERSION,    
-        STATE_ID_STATUS,            
+        STATE_WHO_AM_I = 0,
+        STATE_FIRMWARE_VERSION,
+        STATE_ID_STATUS,
         STATE_PWM_PARAMETER,
         STATE_REPORT_SENSOR_ADC,
-        STATE_CONTROLLER_STATUS,    
+        STATE_CONTROLLER_STATUS,
 
-        STATE_RESET_CONTROLLER,     
+        STATE_RESET_CONTROLLER,
         STATE_KICK_OFF_CONTROLLER,
         STATE_REPORT_MCU_INFORMATION,
-		STATE_HOME_CMD,
-		STATE_PAUSE_REPORT_INFO,
-		STATE_CONTINUE_REPORT_INFO,
-			
-        STATE_ALL_OF_PID_PARAM,     
-        STATE_POSITION_OF_PID_PARAM, 
-        STATE_VELOCITY_OF_PID_PARAM, 
-        STATE_TORQUE_OF_PID_PARAM,   
-                              
-        STATE_MAX_OF_POSITION_CMD,   
-        STATE_MAX_OF_VELOCITY_CMD,   
-        STATE_MAX_OF_TORQUE_CMD,    
-        STATE_MAX_OF_PWM_DUTYCYCLE,  
-                              
-        STATE_POSITION_TARGET_CMD,   
-        STATE_VELOCITY_EXT_CMD,     
-        STATE_TORQUE_EXT_CMD,       
-        STATE_DEBUG_MODE,           
+        STATE_HOME_CMD,
+        STATE_PAUSE_REPORT_INFO,
+        STATE_CONTINUE_REPORT_INFO,
+
+        STATE_ALL_OF_PID_PARAM,
+        STATE_POSITION_OF_PID_PARAM,
+        STATE_VELOCITY_OF_PID_PARAM,
+        STATE_TORQUE_OF_PID_PARAM,
+
+        STATE_MAX_OF_POSITION_CMD,
+        STATE_MAX_OF_VELOCITY_CMD,
+        STATE_MAX_OF_TORQUE_CMD,
+        STATE_MAX_OF_PWM_DUTYCYCLE,
+
+        STATE_POSITION_TARGET_CMD,
+        STATE_VELOCITY_EXT_CMD,
+        STATE_TORQUE_EXT_CMD,
+        STATE_REPORT_INFO_PERIOD,
+        STATE_DEBUG_MODE,
     }
 
 
     public struct PID_PARAM
     {
-        public Int32  Kp,
+        public Int32 Kp,
                       Ki,
                       Kd,
                       Int_sat; // integrator saturation
     }
-        
+
     public struct MOTOR_MEMBER
     {
         public byte ticker;
-        
+
         public UInt32 Position_Target,
                       QEI32;
-        
-        public Int16  Velocity_External,
+
+        public Int16 Velocity_External,
                       Velocity_Internal,
                       QEI_Diff16;
-        
+
         public Int16 Torque_External,
                      Torque_Internal,
                      Motor_Current;
-    
+
         public Int16 PWM_Output;
-        
+
     }
 
     public struct MOTOR_PID_MEMBER
@@ -169,22 +175,22 @@ namespace AHRSInterface
         public PID_PARAM Pos;  // position
         public PID_PARAM Vel;  // velocity
         public PID_PARAM Tor;  // torque
-    }    
+    }
 
     public class AHRS
     {
+        public byte ch_tmp;
         // Default constructor
         public AHRS()
         {
             connected = false;
-
             // Fill arrays used for AHRS COM
-            int packet_count = PName.GetValues( typeof( PName ) ).Length;
+            int packet_count = PName.GetValues(typeof(PName)).Length;
             PID = new byte[packet_count];
 
             serialPort = new SerialPort();
-            PacketTimer = new Timer();
-            
+            PacketTimer = new System.Windows.Forms.Timer();
+
             int state_count = StateName.GetValues(typeof(StateName)).Length;
             UpdatePending = new bool[state_count];
             DataPending = new bool[state_count];
@@ -192,38 +198,39 @@ namespace AHRSInterface
             ElapsedTime = new int[state_count];
 
             // Commands that can be sent to the AHRS device
-			PID[(int)PName.WHO_AM_I]				= 0x00;
-			PID[(int)PName.FIRMWARE_VERSION]		= 0x01;
-			PID[(int)PName.ID_STATUS]				= 0x03;
-			PID[(int)PName.PWM_PARAMETER]			= 0x04;
-			PID[(int)PName.CMD_CRC_FAILED]			= 0x05;
-			PID[(int)PName.CMD_NO_SUPPORT]			= 0x06;
-			PID[(int)PName.CMD_OVER_DATA_LENGTH]	= 0x07;
-			PID[(int)PName.CMD_COMPLETE]			= 0x08;
-			PID[(int)PName.REPORT_SENSOR_ADC]		= 0x0E;
-			PID[(int)PName.CONTROLLER_STATUS]		= 0x0F;
-			
-			PID[(int)PName.RESET_CONTROLLER]		= 0x10;
-			PID[(int)PName.KICK_OFF_CONTROLLER] 	= 0x11;
-			PID[(int)PName.REPORT_MCU_INFORMATION]	= 0x12;
-			PID[(int)PName.HOME_CMD] 				= 0x13;
-			PID[(int)PName.PAUSE_REPORT_INFO]		= 0x14;
-			PID[(int)PName.CONTINUE_REPORT_INFO]	= 0x15;
-			
-			PID[(int)PName.ALL_OF_PID_PARAM]		= 0x20;
-			PID[(int)PName.POSITION_OF_PID_PARAM]	= 0x21;
-			PID[(int)PName.VELOCITY_OF_PID_PARAM]	= 0x22;
-			PID[(int)PName.TORQUE_OF_PID_PARAM] 	= 0x23;
-			
-			PID[(int)PName.MAX_OF_POSITION_CMD] 	= 0x30;
-			PID[(int)PName.MAX_OF_VELOCITY_CMD] 	= 0x31;
-			PID[(int)PName.MAX_OF_TORQUE_CMD]		= 0x32;
-			PID[(int)PName.MAX_OF_PWM_DUTYCYCLE]	= 0x33;
-			
-			PID[(int)PName.POSITION_TARGET_CMD] 	= 0x40;
-			PID[(int)PName.VELOCITY_EXT_CMD]		= 0x41;
-			PID[(int)PName.TORQUE_EXT_CMD]			= 0x42;
-			PID[(int)PName.DEBUG_MODE]				= 0xFF;
+            PID[(int)PName.WHO_AM_I] = 0x00;
+            PID[(int)PName.FIRMWARE_VERSION] = 0x01;
+            PID[(int)PName.ID_STATUS] = 0x03;
+            PID[(int)PName.PWM_PARAMETER] = 0x04;
+            PID[(int)PName.CMD_CRC_FAILED] = 0x05;
+            PID[(int)PName.CMD_NO_SUPPORT] = 0x06;
+            PID[(int)PName.CMD_OVER_DATA_LENGTH] = 0x07;
+            PID[(int)PName.CMD_COMPLETE] = 0x08;
+            PID[(int)PName.REPORT_SENSOR_ADC] = 0x0E;
+            PID[(int)PName.CONTROLLER_STATUS] = 0x0F;
+
+            PID[(int)PName.RESET_CONTROLLER] = 0x10;
+            PID[(int)PName.KICK_OFF_CONTROLLER] = 0x11;
+            PID[(int)PName.REPORT_MCU_INFORMATION] = 0x12;
+            PID[(int)PName.HOME_CMD] = 0x13;
+            PID[(int)PName.PAUSE_REPORT_INFO] = 0x14;
+            PID[(int)PName.CONTINUE_REPORT_INFO] = 0x15;
+
+            PID[(int)PName.ALL_OF_PID_PARAM] = 0x20;
+            PID[(int)PName.POSITION_OF_PID_PARAM] = 0x21;
+            PID[(int)PName.VELOCITY_OF_PID_PARAM] = 0x22;
+            PID[(int)PName.TORQUE_OF_PID_PARAM] = 0x23;
+
+            PID[(int)PName.MAX_OF_POSITION_CMD] = 0x30;
+            PID[(int)PName.MAX_OF_VELOCITY_CMD] = 0x31;
+            PID[(int)PName.MAX_OF_TORQUE_CMD] = 0x32;
+            PID[(int)PName.MAX_OF_PWM_DUTYCYCLE] = 0x33;
+
+            PID[(int)PName.POSITION_TARGET_CMD] = 0x40;
+            PID[(int)PName.VELOCITY_EXT_CMD] = 0x41;
+            PID[(int)PName.TORQUE_EXT_CMD] = 0x42;
+            PID[(int)PName.REPORT_INFO_PERIOD] = 0x43;
+            PID[(int)PName.DEBUG_MODE] = 0xFF;
 
 
             // Set AHRS class parameters so that on the next call to 'synch', the class
@@ -239,7 +246,7 @@ namespace AHRSInterface
 
             m_Motor_Member = new MOTOR_MEMBER[Motor_Device_SIZE];
             m_Motor_PID_Member = new MOTOR_PID_MEMBER[Motor_Device_SIZE];
-            
+
             m_Pos_SoftStart = new Int16[Motor_Device_SIZE];
             m_Max_Vel_Cmd = new Int16[Motor_Device_SIZE];
             m_Max_Tor_Cmd = new Int16[Motor_Device_SIZE];
@@ -269,7 +276,7 @@ namespace AHRSInterface
          * Private member variables
          * 
          * *********************************************************************************/
-        
+
         // Events for interfacing with AHRS class
         // A PacketReveivedEvent occurs when a new packet is received and parsed.
         public event PacketDelegate PacketReceivedEvent;
@@ -284,15 +291,15 @@ namespace AHRSInterface
 
         // Data for communication
         private bool connected;
-        private byte bitstatue=0;
+        private byte bitstatue = 0;
         private byte mChBoxch = 0;
         public bool graph_Sketch = true;
 
         private SerialPort serialPort;
-        private Timer PacketTimer;
+        private System.Windows.Forms.Timer PacketTimer;
 
         const int RX_BUF_SIZE = 30000;
-        private byte[] RXbuffer { get; set;  }
+        private byte[] RXbuffer { get; set; }
         private int RXbufPtr = 0;
         const int MAX_PACKET_SIZE = 60;
 
@@ -306,98 +313,114 @@ namespace AHRSInterface
         private MOTOR_MEMBER[] m_Motor_Member;
         private MOTOR_PID_MEMBER[] m_Motor_PID_Member;
 
-        
+
         private Int16[] m_Pos_SoftStart;
         private Int16[] m_Max_Vel_Cmd;
         private Int16[] m_Max_Tor_Cmd;
         private Int16[] m_Max_PWM_Cmd;
         private UInt32[] m_Position_Target;
-        private Int16[]  m_Velocity_External;
+        private Int16[] m_Velocity_External;
         private Int16[] m_Torque_External;
 
 
-        public MOTOR_MEMBER[]  Motor_Member
+        public MOTOR_MEMBER[] Motor_Member
         {
             get { return m_Motor_Member; }
         }
 
-        public MOTOR_PID_MEMBER[]  Motor_PID_Member
+        public MOTOR_PID_MEMBER[] Motor_PID_Member
         {
             get { return m_Motor_PID_Member; }
-            set { m_Motor_PID_Member = value;
-                  //UpdatePending[(int)StateName.STATE_ALL_OF_PID_PARAM] = true;
-                }
+            set
+            {
+                m_Motor_PID_Member = value;
+                //UpdatePending[(int)StateName.STATE_ALL_OF_PID_PARAM] = true;
+            }
         }
 
         public UInt32[] Position_Target
         {
             get { return m_Position_Target; }
-            set { m_Position_Target = value;
-                  //UpdatePending[(int)StateName.STATE_POSITION_TARGET_CMD] = true;
-                }
+            set
+            {
+                m_Position_Target = value;
+                //UpdatePending[(int)StateName.STATE_POSITION_TARGET_CMD] = true;
+            }
         }
 
         public Int16[] Velocity_External
         {
             get { return m_Velocity_External; }
-            set { m_Velocity_External = value;
-                  //UpdatePending[(int)StateName.STATE_VELOCITY_EXT_CMD] = true;
-                }
+            set
+            {
+                m_Velocity_External = value;
+                //UpdatePending[(int)StateName.STATE_VELOCITY_EXT_CMD] = true;
+            }
         }
 
         public Int16[] Torque_External
         {
             get { return m_Torque_External; }
-            set { m_Torque_External = value;
-                  //UpdatePending[(int)StateName.STATE_TORQUE_EXT_CMD] = true;
-                }
+            set
+            {
+                m_Torque_External = value;
+                //UpdatePending[(int)StateName.STATE_TORQUE_EXT_CMD] = true;
+            }
         }
-  
+
 
         public Int16[] Pos_SoftStart
         {
             get { return m_Pos_SoftStart; }
-            set { m_Pos_SoftStart = value;
-                  //UpdatePending[(int)StateName.STATE_MAX_OF_POSITION_CMD] = true;
-                }
+            set
+            {
+                m_Pos_SoftStart = value;
+                //UpdatePending[(int)StateName.STATE_MAX_OF_POSITION_CMD] = true;
+            }
         }
 
         public Int16[] Max_Vel_Cmd
         {
             get { return m_Max_Vel_Cmd; }
-            set { m_Max_Vel_Cmd = value;
-                  //UpdatePending[(int)StateName.STATE_MAX_OF_VELOCITY_CMD] = true;
-                }
+            set
+            {
+                m_Max_Vel_Cmd = value;
+                //UpdatePending[(int)StateName.STATE_MAX_OF_VELOCITY_CMD] = true;
+            }
         }
 
         public Int16[] Max_Tor_Cmd
         {
             get { return m_Max_Tor_Cmd; }
-            set { m_Max_Tor_Cmd = value;
-                  //UpdatePending[(int)StateName.STATE_MAX_OF_TORQUE_CMD] = true;
-                }
+            set
+            {
+                m_Max_Tor_Cmd = value;
+                //UpdatePending[(int)StateName.STATE_MAX_OF_TORQUE_CMD] = true;
+            }
         }
 
         public Int16[] Max_PWM_Cmd
         {
             get { return m_Max_PWM_Cmd; }
-            set { m_Max_PWM_Cmd = value;
-                  //UpdatePending[(int)StateName.STATE_MAX_OF_PWM_DUTYCYCLE] = true;
-                }
+            set
+            {
+                m_Max_PWM_Cmd = value;
+                //UpdatePending[(int)StateName.STATE_MAX_OF_PWM_DUTYCYCLE] = true;
+            }
         }
-         
+
         public bool[] UdtPending
         {
             get { return UpdatePending; }
-            set { UpdatePending = value;}
+            set { UpdatePending = value; }
         }
-        
+
         public bool IsConnected
         {
             get { return connected; }
         }
 
-        public byte  Bit_Statis
+        public byte Bit_Statis
         {
             get { return bitstatue; }
             set { bitstatue = value; }
@@ -454,7 +477,7 @@ namespace AHRSInterface
 
                 // Set maximum delay in milliseconds.  Set to 200 ms for each packet - special cases (ie. packets that take longer) are
                 // set later.
-                MaxDelay[i] = 1000;
+                MaxDelay[i] = 100;
                 ElapsedTime[i] = 0;
                 DataPending[i] = false;
             }
@@ -520,6 +543,7 @@ namespace AHRSInterface
             serialPort.StopBits = StopBits.One;
             serialPort.Handshake = Handshake.None;
 
+
             try
             {
                 //now open the port
@@ -527,23 +551,124 @@ namespace AHRSInterface
 
                 connected = true;
 
-                // Add event handler
-                serialPort.DataReceived += new SerialDataReceivedEventHandler(serialPort_DataReceived);
 
+                /*
+                Packet AHRSPacket = new Packet();
+                AHRSPacket.PacketType = PID[(int)PName.KICK_OFF_CONTROLLER];
+                AHRSPacket.DataLength = 1;
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                for (int k = 0; k < 2; k++) {
+                AHRSPacket.Ch_Status =Convert.ToByte(k);
+
+                byte[] packet = new byte[AHRSPacket.DataLength + 6];                
+                // Build packet header
+                packet[0] = (byte)'E';
+                packet[1] = (byte)'C';
+                packet[2] = (byte)'S';
+                packet[3] = AHRSPacket.PacketType;
+                packet[4] = AHRSPacket.Ch_Status; // channle/status
+                packet[5] = AHRSPacket.DataLength;
+                int i;
+                // Fill data section
+                for (i = 0; i < (AHRSPacket.DataLength - 1); i++)
+                {
+                    packet[6 + i] = AHRSPacket.Data[i];
+                }
+
+                // Add CRC-8 to end of packet
+                packet[6 + i] = AHRSPacket.CRC8;
+
+                serialPort.Write(packet, 0, AHRSPacket.DataLength + 6);
+                }
+                 */
+
+                //updateAHRS((int)StateName.STATE_PAUSE_REPORT_INFO);
+                //Kick_Off();
+                for (int k = 0; k < 8;k++ )
+                {
+                    mChBox_CH = Convert.ToByte(k);
+                    updateAHRS((int)StateName.STATE_RESET_CONTROLLER);
+                    System.Threading.Thread.Sleep(300);
+                    updateAHRS((int)StateName.STATE_REPORT_INFO_PERIOD);
+                    System.Threading.Thread.Sleep(300);
+                    updateAHRS((int)StateName.STATE_KICK_OFF_CONTROLLER);
+                    System.Threading.Thread.Sleep(300);
+                    //updateAHRS((int)StateName.STATE_PAUSE_REPORT_INFO);
+                    //System.Threading.Thread.Sleep(1000);
+                }
+
+                serialPort.DataReceived += new SerialDataReceivedEventHandler(serialPort_DataReceived);
+                serialPort.DiscardInBuffer();
+                //System.Threading.Thread.Sleep(1000);
+                //updateAHRS((int)StateName.STATE_CONTROLLER_STATUS);
+                //Thread receive_thread = new Thread(thread_loop);
+                //receive_thread.Start();
+                //Thread send_thread = new Thread(thread_loop_send);
+                //send_thread.Start();
+                // Add event handler
                 //start send
-                UpdatePending[(int)StateName.STATE_WHO_AM_I] = true;
-                UpdatePending[(int)StateName.STATE_FIRMWARE_VERSION] = true;
+                //UpdatePending[(int)StateName.STATE_WHO_AM_I] = true;
+                //UpdatePending[(int)StateName.STATE_FIRMWARE_VERSION] = true;
                 //UpdatePending[(int)StateName.STATE_ID_STATUS] = true;
                 //UpdatePending[(int)StateName.STATE_PWM_PARAMETER] = true;
-                
+
                 return true;
             }
             catch
             {
                 return false;
             }
-          
+
         }
+        int k =0;
+        public void thread_loop_send() {
+
+
+            //updateAHRS((int)StateName.STATE_RESET_CONTROLLER);
+            while (true)
+            {
+                if (k > 2)
+                    k = 0;
+                else
+                    k = k + 1;
+                mChBox_CH = Convert.ToByte(k);
+                UpdatePending[(int)StateName.STATE_CONTROLLER_STATUS] = true;
+                synch();
+                //updateAHRS((int)StateName.STATE_PAUSE_REPORT_INFO);
+                //updateAHRS((int)StateName.STATE_CONTINUE_REPORT_INFO);
+            }
+            //updateAHRS((int)StateName.STATE_KICK_OFF_CONTROLLER);
+            //System.Threading.Thread.Sleep(200);
+            //updateAHRS((int)StateName.STATE_PAUSE_REPORT_INFO);
+            //PName.PAUSE_REPORT_INFO
+            //updateAHRS((int)StateName.STATE_REPORT_MCU_INFORMATION);
+            //updateAHRS((int)StateName.STATE_HOME_CMD);
+            //Kick_Off();
+            //updateAHRS((int)StateName.ID_STATUS);
+        }
+        public void thread_loop()
+        {
+            while (true)
+            {
+                if (serialPort.BytesToRead > 0) {
+                    //serialPort_DataReceived();
+                    //System.Threading.Thread.Sleep(200);
+                    //updateAHRS((int)StateName.STATE_KICK_OFF_CONTROLLER);
+                    //UpdatePending[(int)StateName.STATE_CONTROLLER_STATUS] = true;
+                    //synch();
+                }
+                if (k > 2)
+                    k = 0;
+                else
+                    k = k + 1;
+                mChBox_CH = Convert.ToByte(k);
+                //if (k==0)
+                //updateAHRS((int)StateName.STATE_CONTROLLER_STATUS);
+                //System.Threading.Thread.Sleep(300);
+            }
+        }
+
 
         /* **********************************************************************************
          * 
@@ -562,8 +687,17 @@ namespace AHRSInterface
             if (connected)
             {
                 connected = false;
-                serialPort.Dispose(); 
+                serialPort.Dispose();
                 serialPort.Close();
+
+                for (int k = 0; k < 4; k++)
+                {
+                    mChBox_CH = Convert.ToByte(k);
+                    updateAHRS((int)StateName.STATE_RESET_CONTROLLER);
+                    System.Threading.Thread.Sleep(1000);
+                    updateAHRS((int)StateName.STATE_PAUSE_REPORT_INFO);
+                    System.Threading.Thread.Sleep(1000);
+                }
             }
 
             return true;
@@ -599,9 +733,10 @@ namespace AHRSInterface
                 {
                     bytes_to_read = RX_BUF_SIZE - 1;
                 }
-            
+
                 // Get serial data
                 serialPort.Read(RXbuffer, RXbufPtr, bytes_to_read);
+                //serialPort.Read(RXbuffer, 0, bytes_to_read);
 
                 RXbufPtr += bytes_to_read;
             }
@@ -636,12 +771,12 @@ namespace AHRSInterface
                 // If start sequence found, try to recover all the data in the packet
                 if (found_packet && ((RXbufPtr - packet_start_index) >= 8))
                 {
-                	int i;
-                	Packet DataPacket = new Packet();
+                    int i;
+                    Packet DataPacket = new Packet();
                     DataPacket.PacketType = RXbuffer[packet_start_index + 3];
-					DataPacket.Ch_Status  = RXbuffer[packet_start_index + 4];
+                    DataPacket.Ch_Status = RXbuffer[packet_start_index + 4];
                     DataPacket.DataLength = RXbuffer[packet_start_index + 5];
-					DataPacket.Data = new byte[DataPacket.DataLength];
+                    DataPacket.Data = new byte[DataPacket.DataLength];
 
                     // Only process packet if data_size is not too large.
                     if (DataPacket.DataLength <= MAX_PACKET_SIZE)
@@ -668,18 +803,23 @@ namespace AHRSInterface
                                 {
                                     DataPacket.Data[i] = RXbuffer[packet_start_index + 6 + i];
                                 }
-    							DataPacket.CRC8 = RXbuffer[packet_start_index + 6 + i];
+                                DataPacket.CRC8 = RXbuffer[packet_start_index + 6 + i];
 
                                 handle_packet(DataPacket);
+
+                                //continue_parsing = 0;//Delay的嫌疑犯?
                             }
+
                             // Copy all received bytes that weren't part of this packet into the beginning of the
                             // buffer.  Then, reset RXbufPtr.
+                            
                             for (int index = 0; index < (buffer_length - packet_length); index++)
                             {
                                 RXbuffer[index] = RXbuffer[(packet_start_index + packet_length) + index];
                             }
-
+                            
                             RXbufPtr = (buffer_length - packet_length);
+                            
                         }
                         else
                         {
@@ -691,7 +831,7 @@ namespace AHRSInterface
                         // data_size was too large - the packet data is invalid.  Clear the RX buffer.
                         RXbufPtr = 0;
                         continue_parsing = 0;
-                        PacketReceivedEvent(PName.CMD_OVER_DATA_LENGTH, -1);
+                        PacketReceivedEvent(PName.CMD_OVER_DATA_LENGTH, -1, DataPacket.Ch_Status);
                     }
                 }
                 else
@@ -699,6 +839,15 @@ namespace AHRSInterface
                     continue_parsing = 0;
                 }
             }
+            /*
+            if (k > 2)
+                k = 0;
+            else
+                k = k + 1;
+            mChBox_CH = Convert.ToByte(k);
+            //if (k==0)
+            updateAHRS((int)StateName.STATE_CONTROLLER_STATUS);
+            System.Threading.Thread.Sleep(300);*/
         }
 
         /* **********************************************************************************
@@ -767,25 +916,25 @@ namespace AHRSInterface
         {
             switch (packet)
             {
-				case PName.WHO_AM_I:
-					 updatePacketSynchHelper(StateName.STATE_WHO_AM_I);
-					 break;
-                     
+                case PName.WHO_AM_I:
+                    updatePacketSynchHelper(StateName.STATE_WHO_AM_I);
+                    break;
+
                 case PName.FIRMWARE_VERSION:
                     updatePacketSynchHelper(StateName.STATE_FIRMWARE_VERSION);
-                break;
-                
+                    break;
+
                 case PName.ID_STATUS:
                     updatePacketSynchHelper(StateName.STATE_ID_STATUS);
-                break;
-                
+                    break;
+
                 case PName.PWM_PARAMETER:
                     updatePacketSynchHelper(StateName.STATE_PWM_PARAMETER);
-                break;
+                    break;
 
                 case PName.REPORT_SENSOR_ADC:
                     updatePacketSynchHelper(StateName.STATE_REPORT_SENSOR_ADC);
-                break;
+                    break;
 
                 case PName.CMD_COMPLETE:
                     if (data[0] == PID[(int)PName.KICK_OFF_CONTROLLER])
@@ -835,13 +984,13 @@ namespace AHRSInterface
                     else if (data[0] == PID[(int)PName.VELOCITY_EXT_CMD])
                     {
                         updatePacketSynchHelper(StateName.STATE_VELOCITY_EXT_CMD);
-                    }                   
+                    }
                     else if (data[0] == PID[(int)PName.TORQUE_EXT_CMD])
                     {
                         updatePacketSynchHelper(StateName.STATE_TORQUE_EXT_CMD);
                     }
-                    
-                break;
+
+                    break;
 
                 default:
                     break;
@@ -868,10 +1017,10 @@ namespace AHRSInterface
          * Handles data packets received over the serial port.
          * 
          * *********************************************************************************/
-        private void handle_packet( Packet DataPacket)
+        private void handle_packet(Packet DataPacket)
         {
             int type_index = -1;
-			byte CRC8_Temp;
+            byte CRC8_Temp;
             byte_conversion_array DConvert = new byte_conversion_array();
 
             type_index = getTypeIndex(DataPacket.PacketType);
@@ -879,12 +1028,12 @@ namespace AHRSInterface
             // For the packet received, update 'dataPending' and 'ElapsedTime' flags
             if (type_index != -1)
             {
-            
+
                 CRC8_Temp = Check_CRC8(DataPacket); // calculation CRC-8
 
-                if ( CRC8_Temp != DataPacket.CRC8)
+                if (CRC8_Temp != DataPacket.CRC8)
                 {
-                    PacketReceivedEvent(PName.CMD_CRC_FAILED, -1);
+                    PacketReceivedEvent(PName.CMD_CRC_FAILED, -1 , DataPacket.Ch_Status);
                 }
                 else
                 {
@@ -895,60 +1044,60 @@ namespace AHRSInterface
             {
                 // Generate a COMMAND_COMPLETE event with a -1 flag.  The -1 indicates that the packet
                 // wasn't recognized.
-                PacketReceivedEvent(PName.CMD_COMPLETE, -1);
+                PacketReceivedEvent(PName.CMD_COMPLETE, -1, DataPacket.Ch_Status);
                 return;
             }
 
             switch (type_index)
             {
                 case (int)PName.WHO_AM_I:
-                    PacketLabelEvent(DataPacket.Data , 1);
-                    PacketReceivedEvent(PName.WHO_AM_I, type_index);
-					break;
+                    PacketLabelEvent(DataPacket.Data, 1);
+                    PacketReceivedEvent(PName.WHO_AM_I, type_index, DataPacket.Ch_Status);
+                    break;
 
                 case (int)PName.FIRMWARE_VERSION:
-                    PacketLabelEvent(DataPacket.Data , 2);
-                    PacketReceivedEvent(PName.FIRMWARE_VERSION, type_index);
-					break;
-					
+                    PacketLabelEvent(DataPacket.Data, 2);
+                    PacketReceivedEvent(PName.FIRMWARE_VERSION, type_index, DataPacket.Ch_Status);
+                    break;
+
                 case (int)PName.REPORT_SENSOR_ADC:
-                    PacketLabelEvent(DataPacket.Data , 23);
-                    PacketReceivedEvent(PName.REPORT_SENSOR_ADC, type_index);
-					break;
-					
+                    PacketLabelEvent(DataPacket.Data, 23);
+                    PacketReceivedEvent(PName.REPORT_SENSOR_ADC, type_index, DataPacket.Ch_Status);
+                    break;
+
                 case (int)PName.ID_STATUS:
-                
-                    PacketReceivedEvent(PName.ID_STATUS, type_index);
+
+                    PacketReceivedEvent(PName.ID_STATUS, type_index, DataPacket.Ch_Status);
                     break;
-                
+
                 case (int)PName.PWM_PARAMETER:
-                
-                    PacketReceivedEvent(PName.PWM_PARAMETER, type_index);
+
+                    PacketReceivedEvent(PName.PWM_PARAMETER, type_index, DataPacket.Ch_Status);
                     break;
-       
+
                 case (int)PName.CMD_COMPLETE:
 
                     type_index = getTypeIndex(DataPacket.Data[0]);
 
-                    PacketReceivedEvent(PName.CMD_COMPLETE, type_index);
+                    PacketReceivedEvent(PName.CMD_COMPLETE, type_index, DataPacket.Ch_Status);
 
                     break;
 
                 case (int)PName.CMD_NO_SUPPORT:
 
-                    PacketReceivedEvent(PName.CMD_NO_SUPPORT, DataPacket.Data[0]);
+                    PacketReceivedEvent(PName.CMD_NO_SUPPORT, DataPacket.Data[0], DataPacket.Ch_Status);
 
                     break;
 
                 case (int)PName.CMD_CRC_FAILED:
 
-                    PacketReceivedEvent(PName.CMD_CRC_FAILED, 0);
+                    PacketReceivedEvent(PName.CMD_CRC_FAILED, 0, DataPacket.Ch_Status);
 
                     break;
 
                 case (int)PName.CMD_OVER_DATA_LENGTH:
 
-                    PacketReceivedEvent(PName.CMD_OVER_DATA_LENGTH, 0);
+                    PacketReceivedEvent(PName.CMD_OVER_DATA_LENGTH, 0, DataPacket.Ch_Status);
 
                     break;
 
@@ -959,8 +1108,8 @@ namespace AHRSInterface
                         // this packet is wrong!!!
                         return;
                     }
-                    byte ch_tmp;
-                    ch_tmp = Convert.ToByte(Convert.ToByte(DataPacket.Ch_Status) & 0xf);
+
+                    this.ch_tmp = DataPacket.Ch_Status;
                     switch (ch_tmp)
                     {
                         case 0:
@@ -1298,18 +1447,18 @@ namespace AHRSInterface
                     m_Motor_Member[mChBox_CH].PWM_Output = DataPacket.Data[21];
                     
                     */
-                    PacketReceivedEvent(PName.CONTROLLER_STATUS, 0);
-                   
+                    PacketReceivedEvent(PName.CONTROLLER_STATUS, 0, DataPacket.Ch_Status);
+
                     bitstatue = Convert.ToByte(Convert.ToByte(DataPacket.Ch_Status) & 0xf0);
                     //bitstatue +=1;
 
                     DataReceivedEvent(ch_tmp);
-                    
+
                     break;
 
-					
-                 default:
-                    
+
+                default:
+
                     break;
 
             }
@@ -1353,14 +1502,16 @@ namespace AHRSInterface
                 if (UpdatePending[i])
                 {
                     DataPending[i] = true;
-                    
+                    updateAHRS(i);
                     // Call UpdateAHRS to send packet to the AHRS to synchronize data
+                    /*
                     if (!updateAHRS(i))
                     {
                         complete = false;
                         DataPending[i] = false;
-                        
+
                     }
+                     */
                 }
             }
 
@@ -1394,13 +1545,13 @@ namespace AHRSInterface
                 AHRSPacket.DataLength = 2;
 
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
-				AHRSPacket.Data[0] = PID[(int)PName.WHO_AM_I];
-  
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = PID[(int)PName.WHO_AM_I];
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_FIRMWARE_VERSION)
             {
@@ -1408,13 +1559,13 @@ namespace AHRSInterface
                 AHRSPacket.DataLength = 2;
 
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
-				AHRSPacket.Data[0] = PID[(int)PName.FIRMWARE_VERSION];
-  
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = PID[(int)PName.FIRMWARE_VERSION];
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_ID_STATUS)
             {
@@ -1422,13 +1573,27 @@ namespace AHRSInterface
                 AHRSPacket.DataLength = 2;
 
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
-				AHRSPacket.Data[0] = PID[(int)PName.ID_STATUS];
-  
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = PID[(int)PName.ID_STATUS];
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
+            }
+            else if (index == (int)StateName.STATE_REPORT_MCU_INFORMATION)
+            {
+                AHRSPacket.PacketType = PID[(int)PName.REPORT_MCU_INFORMATION];
+                AHRSPacket.DataLength = 2;
+
+                AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
+                AHRSPacket.Data[0] = PID[(int)PName.CONTROLLER_STATUS];
+
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_PWM_PARAMETER)
             {
@@ -1436,35 +1601,37 @@ namespace AHRSInterface
                 AHRSPacket.DataLength = 2;
 
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
-				AHRSPacket.Data[0] = PID[(int)PName.PWM_PARAMETER];
-  
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = PID[(int)PName.PWM_PARAMETER];
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_KICK_OFF_CONTROLLER)
             {
                 AHRSPacket.PacketType = PID[(int)PName.KICK_OFF_CONTROLLER];
                 AHRSPacket.DataLength = 1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_RESET_CONTROLLER)
             {
                 AHRSPacket.PacketType = PID[(int)PName.RESET_CONTROLLER];
-                AHRSPacket.DataLength = 1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.DataLength = 2;
+                AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
+                AHRSPacket.Data[0] = 0x00;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_REPORT_SENSOR_ADC)
             {
@@ -1472,46 +1639,47 @@ namespace AHRSInterface
                 AHRSPacket.DataLength = 2;
 
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
-				AHRSPacket.Data[0] = PID[(int)PName.REPORT_SENSOR_ADC];
-  
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = PID[(int)PName.REPORT_SENSOR_ADC];
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_HOME_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.HOME_CMD];
                 AHRSPacket.DataLength = 1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_PAUSE_REPORT_INFO)
             {
+                
                 AHRSPacket.PacketType = PID[(int)PName.PAUSE_REPORT_INFO];
                 AHRSPacket.DataLength = 1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_CONTINUE_REPORT_INFO)
             {
                 AHRSPacket.PacketType = PID[(int)PName.CONTINUE_REPORT_INFO];
                 AHRSPacket.DataLength = 1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_ALL_OF_PID_PARAM)
             {
@@ -1521,200 +1689,225 @@ namespace AHRSInterface
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Pos.Kp;
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-				AHRSPacket.Data[2] = DConvert.byte2;
-				AHRSPacket.Data[3] = DConvert.byte3;
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
+                AHRSPacket.Data[2] = DConvert.byte2;
+                AHRSPacket.Data[3] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Pos.Ki;
-				AHRSPacket.Data[4] = DConvert.byte0;
-				AHRSPacket.Data[5] = DConvert.byte1;
-				AHRSPacket.Data[6] = DConvert.byte2;
-				AHRSPacket.Data[7] = DConvert.byte3;
+                AHRSPacket.Data[4] = DConvert.byte0;
+                AHRSPacket.Data[5] = DConvert.byte1;
+                AHRSPacket.Data[6] = DConvert.byte2;
+                AHRSPacket.Data[7] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Pos.Kd;
-				AHRSPacket.Data[8] = DConvert.byte0;
-				AHRSPacket.Data[9] = DConvert.byte1;
-				AHRSPacket.Data[10] = DConvert.byte2;
-				AHRSPacket.Data[11] = DConvert.byte3;
+                AHRSPacket.Data[8] = DConvert.byte0;
+                AHRSPacket.Data[9] = DConvert.byte1;
+                AHRSPacket.Data[10] = DConvert.byte2;
+                AHRSPacket.Data[11] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Pos.Int_sat;
-				AHRSPacket.Data[12] = DConvert.byte0;
-				AHRSPacket.Data[13] = DConvert.byte1;
-				AHRSPacket.Data[14] = DConvert.byte2;
-				AHRSPacket.Data[15] = DConvert.byte3;
+                AHRSPacket.Data[12] = DConvert.byte0;
+                AHRSPacket.Data[13] = DConvert.byte1;
+                AHRSPacket.Data[14] = DConvert.byte2;
+                AHRSPacket.Data[15] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Vel.Kp;
-				AHRSPacket.Data[16] = DConvert.byte0;
-				AHRSPacket.Data[17] = DConvert.byte1;
-				AHRSPacket.Data[18] = DConvert.byte2;
-				AHRSPacket.Data[19] = DConvert.byte3;
+                AHRSPacket.Data[16] = DConvert.byte0;
+                AHRSPacket.Data[17] = DConvert.byte1;
+                AHRSPacket.Data[18] = DConvert.byte2;
+                AHRSPacket.Data[19] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Vel.Ki;
-				AHRSPacket.Data[20] = DConvert.byte0;
-				AHRSPacket.Data[21] = DConvert.byte1;
-				AHRSPacket.Data[22] = DConvert.byte2;
-				AHRSPacket.Data[23] = DConvert.byte3;
+                AHRSPacket.Data[20] = DConvert.byte0;
+                AHRSPacket.Data[21] = DConvert.byte1;
+                AHRSPacket.Data[22] = DConvert.byte2;
+                AHRSPacket.Data[23] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Vel.Kd;
-				AHRSPacket.Data[24] = DConvert.byte0;
-				AHRSPacket.Data[25] = DConvert.byte1;
-				AHRSPacket.Data[26] = DConvert.byte2;
-				AHRSPacket.Data[27] = DConvert.byte3;
+                AHRSPacket.Data[24] = DConvert.byte0;
+                AHRSPacket.Data[25] = DConvert.byte1;
+                AHRSPacket.Data[26] = DConvert.byte2;
+                AHRSPacket.Data[27] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Vel.Int_sat;
-				AHRSPacket.Data[28] = DConvert.byte0;
-				AHRSPacket.Data[29] = DConvert.byte1;
-				AHRSPacket.Data[30] = DConvert.byte2;
-				AHRSPacket.Data[31] = DConvert.byte3;
+                AHRSPacket.Data[28] = DConvert.byte0;
+                AHRSPacket.Data[29] = DConvert.byte1;
+                AHRSPacket.Data[30] = DConvert.byte2;
+                AHRSPacket.Data[31] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Tor.Kp;
-				AHRSPacket.Data[32] = DConvert.byte0;
-				AHRSPacket.Data[33] = DConvert.byte1;
-				AHRSPacket.Data[34] = DConvert.byte2;
-				AHRSPacket.Data[35] = DConvert.byte3;
+                AHRSPacket.Data[32] = DConvert.byte0;
+                AHRSPacket.Data[33] = DConvert.byte1;
+                AHRSPacket.Data[34] = DConvert.byte2;
+                AHRSPacket.Data[35] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Tor.Ki;
-				AHRSPacket.Data[36] = DConvert.byte0;
-				AHRSPacket.Data[37] = DConvert.byte1;
-				AHRSPacket.Data[38] = DConvert.byte2;
-				AHRSPacket.Data[39] = DConvert.byte3;
+                AHRSPacket.Data[36] = DConvert.byte0;
+                AHRSPacket.Data[37] = DConvert.byte1;
+                AHRSPacket.Data[38] = DConvert.byte2;
+                AHRSPacket.Data[39] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Tor.Kd;
-				AHRSPacket.Data[40] = DConvert.byte0;
-				AHRSPacket.Data[41] = DConvert.byte1;
-				AHRSPacket.Data[42] = DConvert.byte2;
-				AHRSPacket.Data[43] = DConvert.byte3;
+                AHRSPacket.Data[40] = DConvert.byte0;
+                AHRSPacket.Data[41] = DConvert.byte1;
+                AHRSPacket.Data[42] = DConvert.byte2;
+                AHRSPacket.Data[43] = DConvert.byte3;
 
                 DConvert.int32 = m_Motor_PID_Member[mChBox_CH].Tor.Int_sat;
-				AHRSPacket.Data[44] = DConvert.byte0;
-				AHRSPacket.Data[45] = DConvert.byte1;
-				AHRSPacket.Data[46] = DConvert.byte2;
-				AHRSPacket.Data[47] = DConvert.byte3;
-				//AHRSPacket.Data[48] = 0x00;
-				//AHRSPacket.Data[49] = 0x00;
+                AHRSPacket.Data[44] = DConvert.byte0;
+                AHRSPacket.Data[45] = DConvert.byte1;
+                AHRSPacket.Data[46] = DConvert.byte2;
+                AHRSPacket.Data[47] = DConvert.byte3;
+                //AHRSPacket.Data[48] = 0x00;
+                //AHRSPacket.Data[49] = 0x00;
 
                 AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
-                
+
                 if (!sendPacket(AHRSPacket))
-                    return false;                    
+                    return false;
 
             }
             else if (index == (int)StateName.STATE_MAX_OF_POSITION_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.MAX_OF_POSITION_CMD];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Pos_SoftStart[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_MAX_OF_VELOCITY_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.MAX_OF_VELOCITY_CMD];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Max_Vel_Cmd[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_MAX_OF_TORQUE_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.MAX_OF_TORQUE_CMD];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Max_Tor_Cmd[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_MAX_OF_PWM_DUTYCYCLE)
             {
                 AHRSPacket.PacketType = PID[(int)PName.MAX_OF_PWM_DUTYCYCLE];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Max_PWM_Cmd[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_POSITION_TARGET_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.POSITION_TARGET_CMD];
                 AHRSPacket.DataLength = 5;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.uint32 = m_Position_Target[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-				AHRSPacket.Data[2] = DConvert.byte2;
-				AHRSPacket.Data[3] = DConvert.byte3;
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
+                AHRSPacket.Data[2] = DConvert.byte2;
+                AHRSPacket.Data[3] = DConvert.byte3;
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_VELOCITY_EXT_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.VELOCITY_EXT_CMD];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Velocity_External[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
             }
             else if (index == (int)StateName.STATE_TORQUE_EXT_CMD)
             {
                 AHRSPacket.PacketType = PID[(int)PName.TORQUE_EXT_CMD];
                 AHRSPacket.DataLength = 3;
-                
+
                 AHRSPacket.Data = new byte[AHRSPacket.DataLength - 1];
                 DConvert.int16_0 = m_Torque_External[mChBox_CH];
-				AHRSPacket.Data[0] = DConvert.byte0;
-				AHRSPacket.Data[1] = DConvert.byte1;
-                
-				AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+                AHRSPacket.Data[0] = DConvert.byte0;
+                AHRSPacket.Data[1] = DConvert.byte1;
 
-				if (!sendPacket(AHRSPacket))
-					return false;                    
- 
-            }            
-           
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
 
+                if (!sendPacket(AHRSPacket))
+                    return false;
+
+            }
+
+            else if (index == (int)StateName.STATE_REPORT_INFO_PERIOD)
+            {
+                AHRSPacket.PacketType = PID[(int)PName.REPORT_INFO_PERIOD];
+                AHRSPacket.DataLength = 2;
+
+                AHRSPacket.Data = new byte[1];
+                AHRSPacket.Data[0] = Convert.ToByte(50);
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+            }
+            else if (index == (int)StateName.STATE_CONTROLLER_STATUS)
+            {
+
+                AHRSPacket.PacketType = 0x12;
+                AHRSPacket.DataLength = 2;
+
+                AHRSPacket.Data = new byte[1];
+                AHRSPacket.Data[0] = 0x0f;
+
+                AHRSPacket.CRC8 = Check_CRC8(AHRSPacket); // calculation CRC-8
+
+                if (!sendPacket(AHRSPacket))
+                    return false;
+            }
 
             return true;
         }
@@ -1732,21 +1925,21 @@ namespace AHRSInterface
          * Returns 'true' on success, 'false' otherwise
          * 
          * *********************************************************************************/
-        private bool sendPacket( Packet AHRSPacket )
+        private bool sendPacket(Packet AHRSPacket)
         {
             int i;
 
             if (!connected)
                 return false;
 
-			if (AHRSPacket.DataLength == 0)
-			{
-				// this command is failed!!!
-				return false;
-			}
+            if (AHRSPacket.DataLength == 0)
+            {
+                // this command is failed!!!
+                return false;
+            }
 
             byte[] packet = new byte[AHRSPacket.DataLength + 6];
-
+            AHRSPacket.Ch_Status = mChBox_CH;
             // Build packet header
             packet[0] = (byte)'E';
             packet[1] = (byte)'C';
@@ -1768,8 +1961,8 @@ namespace AHRSInterface
             try
             {
                 serialPort.Write(packet, 0, AHRSPacket.DataLength + 6);
-                
-                PacketSentEvent((PName)getTypeIndex(AHRSPacket.PacketType), 0);
+
+                PacketSentEvent((PName)getTypeIndex(AHRSPacket.PacketType), 0, mChBox_CH);
             }
             catch
             {
@@ -1778,7 +1971,7 @@ namespace AHRSInterface
 
             return true;
         }
-        
+
         /* **********************************************************************************
          * 
          * Function: public void Kick_Off
@@ -1793,6 +1986,7 @@ namespace AHRSInterface
          * *********************************************************************************/
         public void Kick_Off()
         {
+            UpdatePending[(int)StateName.STATE_REPORT_INFO_PERIOD] = true;
             UpdatePending[(int)StateName.STATE_KICK_OFF_CONTROLLER] = true;
 
             synch();
@@ -1815,7 +2009,7 @@ namespace AHRSInterface
             UpdatePending[(int)StateName.STATE_HOME_CMD] = true;
 
             synch();
-        }		
+        }
 
         /* **********************************************************************************
          * 
@@ -1834,7 +2028,7 @@ namespace AHRSInterface
             UpdatePending[(int)StateName.STATE_PAUSE_REPORT_INFO] = true;
 
             synch();
-        }	
+        }
 
         /* **********************************************************************************
          * 
@@ -1853,7 +2047,7 @@ namespace AHRSInterface
             UpdatePending[(int)StateName.STATE_CONTINUE_REPORT_INFO] = true;
 
             synch();
-        }	
+        }
 
         /* **********************************************************************************
          * 
@@ -1872,7 +2066,7 @@ namespace AHRSInterface
             UpdatePending[(int)StateName.STATE_REPORT_SENSOR_ADC] = true;
 
             synch();
-        }	
+        }
 
         /* **********************************************************************************
          * 
@@ -1914,8 +2108,8 @@ namespace AHRSInterface
          * 
          * 
          * *********************************************************************************/
-		
-		private byte[] crc8tab = new byte[256] 
+
+        private byte[] crc8tab = new byte[256] 
 		{
 		    0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15,
 			0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D,
@@ -1951,35 +2145,35 @@ namespace AHRSInterface
 			0xE6, 0xE1, 0xE8, 0xEF, 0xFA, 0xFD, 0xF4, 0xF3
 		};
 
-		private byte updcrc8(byte crc, byte data)
-		{
+        private byte updcrc8(byte crc, byte data)
+        {
 
-		    crc = crc8tab[ crc ^ data]; //look-up CRC-8 table
-		    return crc;
-		}
+            crc = crc8tab[crc ^ data]; //look-up CRC-8 table
+            return crc;
+        }
 
-		
+
         private byte Check_CRC8(Packet packet)
         {
-			byte CRC8_Temp = 0;
-			byte Index;
-				
-			CRC8_Temp = updcrc8( CRC8_Temp, (byte)'E');
-			CRC8_Temp = updcrc8( CRC8_Temp, (byte)'C');
-			CRC8_Temp = updcrc8( CRC8_Temp, (byte)'S');
-			
-			CRC8_Temp = updcrc8( CRC8_Temp, packet.PacketType);
-			CRC8_Temp = updcrc8( CRC8_Temp, packet.Ch_Status);
-			CRC8_Temp = updcrc8( CRC8_Temp, packet.DataLength);
-			
-			for ( Index = 0; Index < (packet.DataLength - 1); Index++ )
-			{
-				CRC8_Temp = updcrc8( CRC8_Temp, packet.Data[Index]);
-			}
-			
-			return CRC8_Temp;
+            byte CRC8_Temp = 0;
+            byte Index;
 
-        }		
+            CRC8_Temp = updcrc8(CRC8_Temp, (byte)'E');
+            CRC8_Temp = updcrc8(CRC8_Temp, (byte)'C');
+            CRC8_Temp = updcrc8(CRC8_Temp, (byte)'S');
+
+            CRC8_Temp = updcrc8(CRC8_Temp, packet.PacketType);
+            CRC8_Temp = updcrc8(CRC8_Temp, packet.Ch_Status);
+            CRC8_Temp = updcrc8(CRC8_Temp, packet.DataLength);
+
+            for (Index = 0; Index < (packet.DataLength - 1); Index++)
+            {
+                CRC8_Temp = updcrc8(CRC8_Temp, packet.Data[Index]);
+            }
+
+            return CRC8_Temp;
+
+        }
 
 
     }
